@@ -1,16 +1,27 @@
 cmake_minimum_required(VERSION 3.13)
 
-add_executable(lab8_sdr
+# 1. Pull in the Pico SDK helper (MUST be before project())
+include(pico_sdk_import.cmake)
+
+project(SDR_Audio)
+
+# 2. Initialize the Pico SDK
+pico_sdk_init()
+
+# 3. Define the executable
+add_executable(sdr_driver
     main.c
     usb_descriptors.c
     si5351.c
 )
 
-target_include_directories(lab8_sdr PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(sdr_driver PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 
-pico_generate_pio_header(lab8_sdr ${CMAKE_CURRENT_LIST_DIR}/i2s_rx.pio)
+# 4. Generate the PIO header
+pico_generate_pio_header(sdr_driver ${CMAKE_CURRENT_LIST_DIR}/i2s_rx.pio)
 
-target_link_libraries(lab8_sdr
+# 5. Link libraries
+target_link_libraries(sdr_driver
     pico_stdlib
     hardware_dma
     hardware_pio
@@ -22,6 +33,9 @@ target_link_libraries(lab8_sdr
     tinyusb_board
 )
 
-pico_enable_stdio_usb(lab8_sdr 0)
-pico_enable_stdio_uart(lab8_sdr 0)
-pico_add_extra_outputs(lab8_sdr)
+# 6. USB/UART Configuration
+pico_enable_stdio_usb(sdr_driver 0)
+pico_enable_stdio_uart(sdr_driver 0)
+
+# 7. Generate .uf2 file
+pico_add_extra_outputs(sdr_driver)
