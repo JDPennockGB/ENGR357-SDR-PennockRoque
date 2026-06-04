@@ -149,10 +149,10 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) { (void)index; ret
 static char const *const string_desc_arr[] = {
     (const char[]){0x09, 0x04},
     "Joseph Pennock",
-    "Final SDR Audio",
+    "Final SDR",
     "000008", 
     "CDC Interface",
-    "Audio Interface"
+    "SDR Audio Interface"
 };
 
 static uint16_t _desc_str[32];
