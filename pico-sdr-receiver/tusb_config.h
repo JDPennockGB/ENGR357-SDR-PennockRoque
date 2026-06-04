@@ -16,7 +16,7 @@ extern "C" {
 
 #define CFG_TUD_AUDIO           1
 // Exact memory reservations required for the raw descriptor
-#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN        187
+#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN        112
 #define CFG_TUD_AUDIO_FUNC_1_N_AS_INT        1
 #define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ     64
 

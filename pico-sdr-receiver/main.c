@@ -71,7 +71,11 @@ static void audio_task(void) {
         for (int i = 0; i < WORDS_PER_BUF; i++) {
             src[i] &= 0xFFFFFF00; 
         }
-        tud_audio_write(src, SINGLE_BUFFER_SIZE);
+        
+        // ONLY write to USB if the host is actively pulling data
+        if (s_audio_alt == 1) {
+            tud_audio_write(src, SINGLE_BUFFER_SIZE);
+        }
     }
 }
 
@@ -185,42 +189,65 @@ int main(void) {
 }
 
 // --- USB Audio Callbacks (Fixed) ---
+// --- USB Audio Callbacks (Fixed) ---
 bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-    (void)rhport; s_audio_alt = (uint8_t)(p_request->wValue & 0xFF); return true;
+    (void)rhport; 
+    s_audio_alt = (uint8_t)(p_request->wValue & 0xFF); 
+    return true;
 }
 
 bool tud_audio_set_itf_close_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-    (void)rhport; (void)p_request; return true;
-}
-
-bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
-    (void)rhport;
-    if ((p_request->wValue >> 8) == 0x01 && p_request->wLength == 3) { // 0x01 = SAMPLING_FREQ
-        s_sample_rate_hz = ((uint32_t)pBuff[2] << 16) | ((uint32_t)pBuff[1] <<  8) |  (uint32_t)pBuff[0];
-    }
+    (void)rhport; (void)p_request; 
     return true;
 }
 
 bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-    if ((p_request->wValue >> 8) == 0x01) { // 0x01 = SAMPLING_FREQ
-        uint8_t freq[3] = {(uint8_t)(s_sample_rate_hz & 0xFFu), (uint8_t)((s_sample_rate_hz >>  8) & 0xFFu), (uint8_t)((s_sample_rate_hz >> 16) & 0xFFu)};
-        return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, freq, sizeof(freq));
+    if ((p_request->wValue >> 8) == 0x01) { // 0x01 = SAMPLING_FREQ control
+        uint8_t req = p_request->bRequest;
+        
+        // 0x81 = GET_CUR, 0x82 = GET_MIN, 0x83 = GET_MAX
+        if (req == 0x81 || req == 0x82 || req == 0x83) { 
+            uint8_t freq[3] = {(uint8_t)(s_sample_rate_hz & 0xFFu), 
+                               (uint8_t)((s_sample_rate_hz >>  8) & 0xFFu), 
+                               (uint8_t)((s_sample_rate_hz >> 16) & 0xFFu)};
+            return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, freq, sizeof(freq));
+        } 
+        // 0x84 = GET_RES
+        else if (req == 0x84) { 
+            uint8_t res[3] = {0, 0, 0}; // 0 Hz resolution for a fixed frequency
+            return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, res, sizeof(res));
+        }
     }
-    return false;
+    return false; // Stall anything else
 }
 
-bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
-    (void)rhport; uint8_t channelNum = (uint8_t)(p_request->wValue & 0xFF); 
-    if ((p_request->wValue >> 8) == 0x01 && channelNum < 3u) { // 0x01 = MUTE
-        s_mute[channelNum] = pBuff[0]; 
-    } 
-    return true;
+bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
+    (void)rhport;
+    // Only respond to 0x01 (SET_CUR)
+    if (p_request->bRequest == 0x01 && (p_request->wValue >> 8) == 0x01 && p_request->wLength == 3) {
+        s_sample_rate_hz = ((uint32_t)pBuff[2] << 16) | ((uint32_t)pBuff[1] <<  8) |  (uint32_t)pBuff[0];
+        return true;
+    }
+    return false;
 }
 
 bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
     uint8_t channelNum = (uint8_t)(p_request->wValue & 0xFF);
     if ((p_request->wValue >> 8) == 0x01 && channelNum < 3u) { // 0x01 = MUTE
-        return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &s_mute[channelNum], 1);
+        // Boolean controls only support GET_CUR
+        if (p_request->bRequest == 0x81) { 
+            return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &s_mute[channelNum], 1);
+        }
     }
+    return false; 
+}
+
+bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
+    (void)rhport; uint8_t channelNum = (uint8_t)(p_request->wValue & 0xFF); 
+    // Only allow SET_CUR
+    if (p_request->bRequest == 0x01 && (p_request->wValue >> 8) == 0x01 && channelNum < 3u) { 
+        s_mute[channelNum] = pBuff[0]; 
+        return true;
+    } 
     return false;
 }
