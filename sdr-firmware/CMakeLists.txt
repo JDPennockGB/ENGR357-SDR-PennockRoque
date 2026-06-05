@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-# 1. Pull in the Pico SDK helper (MUST be before project())
+# 1. Pull in the Pico SDK helper
 include(pico_sdk_import.cmake)
 
 project(SDR_Audio)
@@ -37,5 +37,5 @@ target_link_libraries(sdr_driver
 pico_enable_stdio_usb(sdr_driver 0)
 pico_enable_stdio_uart(sdr_driver 0)
 
-# 7. Generate .uf2 file
+# 7. REQUIRED: This generates the .uf2 file
 pico_add_extra_outputs(sdr_driver)

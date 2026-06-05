@@ -9,8 +9,13 @@
 #include "hardware/i2c.h"
 #include "tusb.h"
 #include "bsp/board.h"
-#include "si5351.h"
 #include "i2s_rx.pio.h"
+#include "si5351.h" // <--- IMPORTANT: Required for compilation
+
+void cdc_send(const char* str);
+
+#define ENC_A_PIN 20
+#define ENC_B_PIN 21
 
 // --- Hardware Pins ---
 #define LED_PIN      25
@@ -71,17 +76,16 @@ static void audio_task(void) {
         for (int i = 0; i < WORDS_PER_BUF; i++) {
             src[i] &= 0xFFFFFF00; 
         }
-        
-        // ONLY write to USB if the host is actively pulling data
         if (s_audio_alt == 1) {
             tud_audio_write(src, SINGLE_BUFFER_SIZE);
         }
     }
 }
 
-// -------------------------------------------------------------------------
-// CDC Quisk Callbacks & Parser
-// -------------------------------------------------------------------------
+void encoder_callback(uint gpio, uint32_t events) {
+    gpio_xor_mask(1u << LED_PIN); 
+}
+
 void cdc_send(const char* str) {
     tud_cdc_write(str, strlen(str));
     tud_cdc_write_flush();
@@ -100,6 +104,7 @@ void cdc_task(void) {
         char buf[64];
         uint32_t count = tud_cdc_read(buf, sizeof(buf) - 1);
         buf[count] = '\0';
+
         if (buf[0] == 0x03 || buf[0] == 0x04) return;
 
         if (strncmp(buf, "VER", 3) == 0) cdc_send("VER,1.0\nOK\n");
@@ -114,7 +119,9 @@ void cdc_task(void) {
             } else {
                 uint32_t hz, n, a, b, c, p1, p2, p3;
                 if (sscanf(buf, "FREQ,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu", &hz, &n, &a, &b, &c, &p1, &p2, &p3) == 8) {
-                    si5351_set_freq_regs(i2c0, n, p1, p2, p3, true); 
+                    // CORRECTED: Now using the correct library function
+                    si5351_set_frequency(i2c0, SI5351_CLK0, hz, SI5351_INTEGER_APPROX, SI5351_CLK_NONE); 
+                    
                     current_hz = hz;
                     strcpy(current_status, (b == 0) ? "OK,G,0" : "OK,F,0");
                     char resp[64];
@@ -133,11 +140,18 @@ int main(void) {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
+    gpio_init(ENC_A_PIN); gpio_set_dir(ENC_A_PIN, GPIO_IN); gpio_pull_up(ENC_A_PIN);
+    gpio_init(ENC_B_PIN); gpio_set_dir(ENC_B_PIN, GPIO_IN); gpio_pull_up(ENC_B_PIN);
+    gpio_set_irq_enabled_with_callback(ENC_A_PIN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &encoder_callback);
+    gpio_set_irq_enabled_with_callback(ENC_B_PIN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &encoder_callback);
+
     i2c_init(i2c0, 400 * 1000);
     gpio_set_function(I2C_SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL_PIN, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA_PIN);
     gpio_pull_up(I2C_SCL_PIN);
+    
+    // CORRECTED: Ensure init is called
     si5351_init(i2c0);
 
     gpio_init(FMT_PIN); gpio_set_dir(FMT_PIN, GPIO_OUT); gpio_put(FMT_PIN, 0);  
@@ -170,20 +184,10 @@ int main(void) {
 
     multicore_launch_core1(core1_entry);   
 
-    uint32_t blink_timer = 0;
-    bool led_state = false;
-
     while (1) {
         tud_task();    
         cdc_task();    
         audio_task();  
-
-        // Heartbeat LED
-        if (time_us_32() - blink_timer > 500000) {
-            blink_timer = time_us_32();
-            led_state = !led_state;
-            gpio_put(LED_PIN, led_state);
-        }
     }
     return 0;
 }
