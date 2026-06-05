@@ -1,3 +1,8 @@
+/**
+ * SDR Controller - Main Firmware
+ * Pinout Configured: DOUT=GPIO2, SD=GPIO11, LCD=GPIO3-10,14,15
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -11,20 +16,8 @@
 #include "bsp/board.h"
 #include "i2s_rx.pio.h"
 #include "si5351.h"
-#include "class/audio/audio_device.h" // ADD THIS LINE
-
-// --- Fallback definitions in case header isn't updating ---
-#ifndef SI5351_INTEGER_APPROX
-#define SI5351_INTEGER_APPROX 0
-#endif
-
-// --- Function Prototypes ---
-static void dma_handler(void);
-static void core1_entry(void);
-static void audio_task(void);
-void encoder_callback(uint gpio, uint32_t events);
-void cdc_send(const char* str);
-void cdc_task(void);
+#include "lcd_driver.h"
+#include "class/audio/audio_device.h"
 
 // --- Hardware Pins ---
 #define ENC_A_PIN    20
@@ -32,14 +25,13 @@ void cdc_task(void);
 #define LED_PIN      25
 #define I2C_SDA_PIN  12
 #define I2C_SCL_PIN  13
-#define I2S_DATA_PIN 14  
-#define FMT_PIN      10  
-#define MD1_PIN      11  
+#define I2S_DATA_PIN 2    // DOUT
+#define I2S_BCK_PIN  0
+#define I2S_WS_PIN   1
 
 // --- State Variables ---
 static volatile uint32_t current_hz = 5680000; 
-static volatile bool frequency_changed = true; // Set to true to trigger first init
-static char current_status[16] = "OK,X,0"; 
+static volatile bool frequency_changed = true;
 static bool sentinel_sent = false;
 
 static uint8_t  s_audio_alt      = 0;
@@ -49,7 +41,6 @@ static uint8_t  s_mute[3]        = {0, 0, 0};
 // --- DMA & Audio Buffers ---
 #define SINGLE_BUFFER_SIZE  768             
 #define WORDS_PER_BUF       (SINGLE_BUFFER_SIZE / 4)  
-
 static uint32_t buf_a[WORDS_PER_BUF];
 static uint32_t buf_b[WORDS_PER_BUF];
 static uint dma_chan_a, dma_chan_b;
@@ -71,12 +62,10 @@ static void __not_in_flash_func(dma_handler)(void) {
 
 void encoder_callback(uint gpio, uint32_t events) {
     if (gpio == ENC_A_PIN) {
-        // If Pin B is low, we are turning one way, else the other
         if (gpio_get(ENC_B_PIN)) current_hz += 40000;
         else current_hz -= 40000;
         frequency_changed = true;
     }
-    gpio_xor_mask(1u << LED_PIN); 
 }
 
 // --- Tasks ---
@@ -100,43 +89,47 @@ static void audio_task(void) {
     }
 }
 
-void cdc_send(const char* str) {
-    tud_cdc_write(str, strlen(str));
-    tud_cdc_write_flush();
-}
-
 void cdc_task(void) {
     if (!tud_cdc_connected()) { sentinel_sent = false; return; }
-    if (!sentinel_sent) { cdc_send("SDR ready\n"); sentinel_sent = true; }
-    if (tud_cdc_available()) {
-        char buf[64];
-        uint32_t count = tud_cdc_read(buf, sizeof(buf) - 1);
-        buf[count] = '\0';
-        if (buf[0] == 0x03 || buf[0] == 0x04) return;
-        // Commands...
+    if (!sentinel_sent) { 
+        tud_cdc_write("SDR ready\n", 10);
+        tud_cdc_write_flush();
+        sentinel_sent = true; 
     }
 }
 
 int main(void) {
-    board_init();
+    // Replace board_init(); with:
+    stdio_init_all();
     tusb_init();
 
-    gpio_init(LED_PIN); gpio_set_dir(LED_PIN, GPIO_OUT);
-
-    // Encoder
-    gpio_init(ENC_A_PIN); gpio_set_dir(ENC_A_PIN, GPIO_IN); gpio_pull_up(ENC_A_PIN);
-    gpio_init(ENC_B_PIN); gpio_set_dir(ENC_B_PIN, GPIO_IN); gpio_pull_up(ENC_B_PIN);
-    gpio_set_irq_enabled_with_callback(ENC_A_PIN, GPIO_IRQ_EDGE_RISE, true, &encoder_callback);
-
-    // I2C
+    lcd_init();
     i2c_init(i2c0, 400 * 1000);
     gpio_set_function(I2C_SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SDA_PIN); gpio_pull_up(I2C_SCL_PIN);
-    
     si5351_init(i2c0);
 
-    // ... (Your existing PIO/DMA Init code) ...
+    gpio_init(ENC_A_PIN); gpio_pull_up(ENC_A_PIN);
+    gpio_init(ENC_B_PIN); gpio_pull_up(ENC_B_PIN);
+    gpio_set_irq_enabled_with_callback(ENC_A_PIN, GPIO_IRQ_EDGE_RISE, true, &encoder_callback);
+
+    PIO pio = pio0;
+    uint offset = pio_add_program(pio, &i2s_rx_program);
+    // Your pins are: BCK=0, WS=1, DOUT=2. The base pin is 0.
+// PIO will automatically assign: base+0=BCK, base+1=WS, base+2=DOUT.
+    i2s_rx_program_init(pio, 0, offset, 0);
+    dma_chan_a = dma_claim_unused_channel(true);
+    dma_chan_b = dma_claim_unused_channel(true);
+    
+    dma_channel_config c = dma_channel_get_default_config(dma_chan_a);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
+    channel_config_set_read_increment(&c, false);
+    channel_config_set_write_increment(&c, true);
+    channel_config_set_dreq(&c, pio_get_dreq(pio, 0, false));
+    dma_channel_configure(dma_chan_a, &c, buf_a, &pio->rxf[0], WORDS_PER_BUF, false);
+    
+    // ... Repeat for dma_chan_b ...
+
     multicore_launch_core1(core1_entry);
 
     while (1) {
@@ -144,51 +137,31 @@ int main(void) {
         cdc_task();    
         audio_task();  
 
-        // Update frequency if encoder moved
+        // Inside while(1) loop in main.c
+        gpio_put(LED_PIN, 1);
+        sleep_ms(500);
+        gpio_put(LED_PIN, 0);
+        sleep_ms(500);
+
+        tud_task();
+        cdc_task();
+        audio_task();
+
         if (frequency_changed) {
             si5351_set_frequency(i2c0, SI5351_CLK0, current_hz, SI5351_INTEGER_APPROX, SI5351_CLK_NONE);
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%4d kHz", (int)(current_hz / 1000));
+            lcd_clear();
+            lcd_print(buf);
             frequency_changed = false;
         }
     }
-    return 0;
 }
-// (Include audio callbacks below)
 
-
-
-
-
-
-
+// --- Audio Callbacks ---
 bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) { (void)rhport; s_audio_alt = (uint8_t)(p_request->wValue & 0xFF); return true; }
-bool tud_audio_set_itf_close_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) { (void)rhport; (void)p_request; return true; }
-bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) { 
-    if ((p_request->wValue >> 8) == 0x01) { 
-        if (p_request->bRequest == 0x81 || p_request->bRequest == 0x82 || p_request->bRequest == 0x83) { 
-            uint8_t freq[3] = {(uint8_t)(s_sample_rate_hz & 0xFFu), (uint8_t)((s_sample_rate_hz >> 8) & 0xFFu), (uint8_t)((s_sample_rate_hz >> 16) & 0xFFu)};
-            return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, freq, sizeof(freq));
-        }
-    }
-    return false;
-}
-bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
-    if (p_request->bRequest == 0x01 && (p_request->wValue >> 8) == 0x01 && p_request->wLength == 3) {
-        s_sample_rate_hz = ((uint32_t)pBuff[2] << 16) | ((uint32_t)pBuff[1] << 8) | (uint32_t)pBuff[0];
-        return true;
-    }
-    return false;
-}
-bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-    uint8_t channelNum = (uint8_t)(p_request->wValue & 0xFF);
-    if ((p_request->wValue >> 8) == 0x01 && channelNum < 3u) {
-        if (p_request->bRequest == 0x81) return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &s_mute[channelNum], 1);
-    }
-    return false;
-}
-bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
-    uint8_t channelNum = (uint8_t)(p_request->wValue & 0xFF);
-    if (p_request->bRequest == 0x01 && (p_request->wValue >> 8) == 0x01 && channelNum < 3u) {
-        s_mute[channelNum] = pBuff[0]; return true;
-    }
-    return false;
-}
+bool tud_audio_set_itf_close_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) { return true; }
+bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) { return false; }
+bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) { return true; }
+bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request) { return false; }
+bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) { return true; }

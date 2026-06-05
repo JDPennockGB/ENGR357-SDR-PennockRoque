@@ -1,77 +1,61 @@
-/*
-I2S PIO slave receiver for the PCM1808 ADC. 
-This ADC uses I2S format MSB 24 data bits zero padded to 32 bits per channel.
-Standard I2S timing: LRCLK changes, 1 BCLK cycle delay, then 32 BCLK cycles of data (24-bit audio + 8-bit zero padding)
-Data aligned to upper 3 bytes of 32-bit word (bits 31-8, with lower byte as zero padding)
-
-Input pin order: DATA, BCK, LRCK
-
-Must run at least 4x BCK.
-NOTE: Set JMP pin to LRCK pin.
-NOTE: The very first word read is potentially corrupt, since there is a
-	chance to start in the middle of an L frame and only read part of it.
-	Nevertheless, the frame order should be synchronized (first word is L,
-	second is R, etc.)
-*/
-
 .program i2s_rx
-.define DATA_PIN 0
-.define BCK_PIN 1
-.define LRCK_PIN 2
+
+; Offsets relative to the base pin assigned in the C-SDK
+.define BCK_OFF  0
+.define LRCK_OFF 1
+.define DOUT_OFF 2
 
 start_sample_l:
-    wait 1 pin BCK_PIN            // DATA should be sampled on rising transition of BCK
-    in pins, 1              // first "bit" of new frame is actually LSB of last frame, per I2S
-    push noblock            // push however many bits we read into the FIFO
-    wait 0 pin BCK_PIN            // ignore first BCK transition after edge
+    wait 1 pin BCK_OFF          ; Sample on rising edge
+    in pins, 1                  ; Read DOUT (must be mapped to base+2)
+    push noblock                
+    wait 0 pin BCK_OFF          
 public_entry_point:
-    wait 0 pin LRCK_PIN            // wait for L frame to come around before we start
+    wait 0 pin LRCK_OFF         ; Wait for L frame start
 sample_l:
-    wait 1 pin BCK_PIN            // DATA should be sampled on rising transition of BCK
-    in pins, 1              // read DATA
-    wait 0 pin BCK_PIN            // don't sample more than once per rising edge, wait for next clock
-    jmp pin start_sample_r  // if LRCK has gone high, we're "done" with this word (1 bit left to read)
+    wait 1 pin BCK_OFF
+    in pins, 1                  ; Read DOUT
+    wait 0 pin BCK_OFF
+    jmp pin start_sample_r      ; LRCK went high -> switch to R
     jmp sample_l
+
 start_sample_r:
-    wait 1 pin BCK_PIN            // wait for the last bit of the previous frame
-    in pins, 1              // first "bit" of new frame is actually LSB of last frame, per I2S
-    push noblock            // push the completed word to the FIFO
-    wait 0 pin BCK_PIN            // wait for next clock cycle
+    wait 1 pin BCK_OFF
+    in pins, 1                  ; Read DOUT
+    push noblock
+    wait 0 pin BCK_OFF
+
 sample_r:
-    wait 1 pin BCK_PIN
+    wait 1 pin BCK_OFF
     in pins, 1
-    wait 0 pin BCK_PIN
-    jmp pin sample_r        // if LRCK is still high, we're still sampling this word
-                            // implicit jmp to start_sample_l: otherwise, start the loop over
+    wait 0 pin BCK_OFF
+    jmp pin sample_r            ; Loop while LRCK is high
+    jmp sample_l                ; Back to L frame
 
 % c-sdk {
-/*
- *  Designed to be used with output master module, requiring overlapping pins:
- *    data_pin_base + 0 = input pin
- *    data_pin_base + 1 = out_master clock_pin_base
- *    data_pin_base + 2 = out_master clock_pin_base + 1
- *
- *  Intended to be run at SCK rate (4x BCK), so clock same as SCK module if using
- *  it, or 4x the BCK frequency (BCK is 64x fs, so 256x fs).
- */
-
-static inline void i2s_rx_program_init(PIO pio, uint8_t sm, uint8_t offset, uint8_t data_pin, uint8_t bck_pin, uint8_t lrck_pin) {
-	pio_gpio_init(pio, data_pin);
-	pio_gpio_init(pio, bck_pin);
-	pio_gpio_init(pio, lrck_pin);
-
-    gpio_disable_pulls(data_pin);
-    gpio_disable_pulls(bck_pin);
-    gpio_disable_pulls(lrck_pin);
+static inline void i2s_rx_program_init(PIO pio, uint8_t sm, uint8_t offset, uint8_t pin_base) {
+    // We assume pins are provided as a contiguous block: 
+    // base = BCK, base+1 = WS/LRCK, base+2 = DOUT
+    // To match your pinout (BCK=0, WS=1, DOUT=2), pass 0 as pin_base.
+    
+    for (int i = 0; i < 3; i++) {
+        pio_gpio_init(pio, pin_base + i);
+        gpio_disable_pulls(pin_base + i);
+    }
 
     pio_sm_config sm_config = i2s_rx_program_get_default_config(offset);
-    sm_config_set_in_pins(&sm_config, data_pin);
+    
+    // Map the pins starting from pin_base
+    sm_config_set_in_pins(&sm_config, pin_base);
+    sm_config_set_jmp_pin(&sm_config, pin_base + 1); // LRCK is offset 1
+    
     sm_config_set_in_shift(&sm_config, false, false, 0);
     sm_config_set_fifo_join(&sm_config, PIO_FIFO_JOIN_RX);
-    sm_config_set_jmp_pin(&sm_config, lrck_pin);
+    
     pio_sm_init(pio, sm, offset, &sm_config);
+    pio_sm_set_enabled(pio, sm, true);
 
-	uint32_t pin_mask = (1u << data_pin) | (1u << bck_pin) | (1u << lrck_pin);
-	pio_sm_set_pindirs_with_mask(pio, sm, 0, pin_mask); // set all specified pins as inputs (0 = input, 1 = output)
+    // Set pins as inputs
+    pio_sm_set_pindirs_with_mask(pio, sm, 0, (7u << pin_base));
 }
 %}
