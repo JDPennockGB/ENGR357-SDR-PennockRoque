@@ -17,10 +17,11 @@ volatile bool si5351_debug_pair_mode = false;
 volatile bool si5351_debug_use_pllb = false;
 volatile bool si5351_debug_programmed = false;
 
-#define SI5351_N_MIN 25u
-#define SI5351_N_MAX 36u
+// Current ranges are too restrictive
+#define SI5351_N_MIN 15u 
+#define SI5351_N_MAX 90u 
 #define SI5351_M_MIN 8u
-#define SI5351_M_MAX 127u
+#define SI5351_M_MAX 200u // Increased from 127
 
 static const uint8_t k_clk_ctrl_regs[3] = {
 	SI5351_REG_CLK0_CTRL,
@@ -203,6 +204,7 @@ bool si5351_init(i2c_inst_t *i2c) {
 void si5351_write_reg(i2c_inst_t *i2c, uint8_t reg, uint8_t val) {
 	(void)i2c_write_reg_checked(i2c, reg, val);
 }
+
 
 uint8_t si5351_read_reg(i2c_inst_t *i2c, uint8_t reg) {
 	uint8_t val = 0;

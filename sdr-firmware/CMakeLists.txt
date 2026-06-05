@@ -12,6 +12,7 @@ pico_sdk_init()
 add_executable(sdr_driver
     main.c
     usb_descriptors.c
+    lcd_driver.c
     si5351.c
 )
 
