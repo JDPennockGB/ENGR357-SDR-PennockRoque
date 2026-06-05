@@ -122,9 +122,9 @@ ENGR-357-SDR/
 │   ├── v2 Tayloe Detector/
 │   └── v3 Tayloe Detector FINAL/
 ├── LT Spice Simulations/   # RF demodulator analysis and circuit models
-    ├── LTSpice project files
+│   ├── LTSpice project files/
 │   └── Simulation Results/ # Images of simulation results
 └── sdr-firmware/           # RP2040 Firmware (Pico SDK)
     ├── build/              # Compiled binaries and artifacts
     ├── PythonUnitTests/    # Verification and testing scripts
-    └── C firmware files
+    └── src/                # C firmware source files
