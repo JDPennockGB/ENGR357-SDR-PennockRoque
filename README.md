@@ -2,6 +2,8 @@
 
 A custom-built, high-performance Software Defined Radio (SDR) receiver powered by the Raspberry Pi Pico (RP2040). This project combines a classic hardware Tayloe detector with modern digital signal processing, streaming 24-bit I/Q audio and CAT control over a single USB cable directly to PC-based SDR software like **Quisk**.
 
+GitHub Link: https://github.com/JDPennockGB/ENGR357-SDR-PennockRoque 
+
 ---
 
 ## Overview
