@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-
+# fixed final version for new drivers, see commit history for old version
 # 1. Pull in the Pico SDK helper
 include(pico_sdk_import.cmake)
 

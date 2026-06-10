@@ -3,6 +3,8 @@
 #include "hardware/i2c.h"
 #include "si5351.h"
 
+ // fixed verson for new drivers
+
 #define I2C_PORT i2c0
 #define SDA_PIN 12
 #define SCL_PIN 13

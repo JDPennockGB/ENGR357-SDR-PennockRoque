@@ -3,6 +3,7 @@
 
 #define RS_PIN 14
 #define E_PIN  15
+ // fixed verson for new drivers
 
 // Pins DB0 to DB7
 static const uint DB_PINS[] = {3, 4, 5, 6, 7, 8, 9, 10};

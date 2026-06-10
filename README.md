@@ -6,7 +6,7 @@ A custom-built, high-performance Software Defined Radio (SDR) receiver powered b
 
 ## Overview
 
-Traditional homebrew SDR receivers often rely on routing analog audio cables into a PC soundcard, which can introduce noise and ground loops. This project solves that by digitizing the baseband I/Q signals directly on the board using a dedicated 24-bit ADC, and utilizing the RP2040's hardware PIO and TinyUSB stack to act as a **Composite CDC-UAC2 USB Device**. 
+Traditional homebrew SDR receivers often rely on routing analog audio cables into a PC soundcard, which can introduce noise and ground loops. This project solves that by digitizing the baseband I/Q signals directly on the board using a dedicated 24-bit ADC, and utilizing the RP2040's hardware PIO and TinyUSB stack to act as a **Composite CDC-UAC1 USB Device**. 
 
 When plugged into a computer, this radio appears simultaneously as:
 1. **USB Audio Class 2.0 (UAC2) Input:** Streaming ultra-clean 24-bit stereo I/Q audio to the PC.
@@ -20,7 +20,7 @@ ADD FEATURES
 
 ## Hardware
 ### Overview
-* **MCU:** Raspberry Pi Pico W (RP2040) utilizing PIO and DMA for zero-jitter data handling.
+* **MCU:** Raspberry Pi Pico (RP2040) utilizing PIO and DMA for zero-jitter data handling.
 * **Clock Generator:** Si5351A providing precise LO generation and the 12.288 MHz Master Clock (MCLK) for the ADC.
 * **Quadrature Generator:** SN74AC74 Johnson counter for exact 90-degree I/Q phase shifting.
 * **Mixer (Tayloe Detector):** SN74CBT3253 Quadrature Sampling Detector.
@@ -69,7 +69,7 @@ The following table outlines the physical connections between the Raspberry Pi P
 ## Software
 ### Overview
 * **Framework:** C/C++ via the Raspberry Pi Pico SDK.
-* **USB Stack:** TinyUSB configured for a unidirectional composite UAC2 Capture + CDC interface.
+* **USB Stack:** TinyUSB configured for a unidirectional composite UAC1 Capture + CDC interface.
 * **DSP Pipeline:** Custom PIO state machines reading I2S data, fed via DMA directly to USB buffers without bottlenecking the CPU.
 
 ### Function Reference
@@ -103,7 +103,7 @@ Handles communication and system state.
 | `void encoder_callback(...)` | ISR that tracks encoder rotation to update the `current_hz` variable, which is then processed by the main loop. |
 
 ### Build Instructions
-1. **Prerequisites**: Ensure the [Pico SDK] abd TinyUSB libraries are installed
+1. **Prerequisites**: Ensure the `Pico SDK` abd `TinyUSB` libraries are installed
 2. **Setup**:
    ```bash
    cd /path/to/sdr-firmware

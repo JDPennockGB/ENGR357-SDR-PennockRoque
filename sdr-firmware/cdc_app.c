@@ -15,6 +15,8 @@
  * "SDR ready\r\n" is sent when the host opens the port (DTR rises).
  */
 
+  // fixed verson for new drivers
+
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>

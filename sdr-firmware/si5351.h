@@ -1,6 +1,8 @@
 #ifndef SI5351_H
 #define SI5351_H
 
+ // fixed verson for new drivers
+ 
 #include <stdbool.h>
 #include <stdint.h>
 

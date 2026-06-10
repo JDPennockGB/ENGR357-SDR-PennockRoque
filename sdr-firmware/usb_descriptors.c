@@ -2,6 +2,8 @@
 #include "tusb_config.h"
 #include <string.h>
 
+ // fixed verson for new drivers
+ 
 enum {
     ITF_NUM_CDC_CONTROL = 0,
     ITF_NUM_CDC_DATA,

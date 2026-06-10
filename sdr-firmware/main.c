@@ -3,6 +3,8 @@
  * Pinout Configured: DOUT=GPIO2, SD=GPIO11, LCD=GPIO3-10,14,15
  */
 
+  // fixed verson for new drivers
+
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>

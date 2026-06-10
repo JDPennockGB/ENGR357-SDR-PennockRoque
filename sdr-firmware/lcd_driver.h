@@ -1,6 +1,6 @@
 #ifndef LCD_DRIVER_H
 #define LCD_DRIVER_H
-
+ // fixed verson for new drivers
 #include "pico/stdlib.h"
 
 // Initialize the LCD with your specific pinout
