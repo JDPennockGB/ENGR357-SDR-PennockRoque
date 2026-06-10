@@ -118,15 +118,27 @@ Handles communication and system state.
 This repository contains the hardware design files, the C/C++ firmware, Python unit tests, and relevant research documentation.
 
 ENGR-357-SDR/
+
 ├── Documents/              # Research notes, datasheets, and design requirements
+
 ├── KiCad Designs/          # PCB schematics, layout files, and BOMs
+
 │   ├── v1 Switch Mixer/
+
 │   ├── v2 Tayloe Detector/
+
 │   └── v3 Tayloe Detector FINAL/
+
 ├── LT Spice Simulations/   # RF demodulator analysis and circuit models
+
 │   ├── LTSpice project files/
+
 │   └── Simulation Results/ # Images of simulation results
+
 └── sdr-firmware/           # RP2040 Firmware (Pico SDK)
+
     ├── build/              # Compiled binaries and artifacts
+
     ├── PythonUnitTests/    # Verification and testing scripts
-    └── src/                # C firmware source files
+
+    └── main.c + drivers                # C firmware source files
