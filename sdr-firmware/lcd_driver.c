@@ -35,7 +35,7 @@ void lcd_init() {
         gpio_set_dir(DB_PINS[i], GPIO_OUT);
     }
 
-    sleep_ms(100);       // Wait >40msec [cite: 259]
+    sleep_ms(100);       // Wait >40msec
     lcd_command(0x30);   // Wake up
     sleep_ms(30);
     lcd_command(0x30);   // Wake up #2
