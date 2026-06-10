@@ -148,11 +148,19 @@ int main(void) {
         audio_task();
 
         if (frequency_changed) {
+            // Keep the oscillator running at the 4x frequency
             si5351_set_frequency(i2c0, SI5351_CLK0, current_hz, SI5351_INTEGER_APPROX, SI5351_CLK_NONE);
+            
+            // Calculate the actual tuned frequency for the display (divided by 4)
+            uint32_t display_hz = current_hz / 4;
+            
+            // Format the string (convert Hz to kHz)
             char buf[16];
-            snprintf(buf, sizeof(buf), "%4d kHz", (int)(current_hz / 1000));
+            snprintf(buf, sizeof(buf), "%4d kHz", (int)(display_hz / 1000));
+            
+            // Print to the LCD
             lcd_clear();
-            lcd_print(buf);
+            lcd_print(buf); 
             frequency_changed = false;
         }
     }
